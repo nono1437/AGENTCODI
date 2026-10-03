@@ -1,0 +1,60 @@
+name: Recover public Termux inputs
+
+on:
+  push:
+    branches: [nono1437-zh-cn-build]
+    paths: ['.github/workflows/recover-public-inputs.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify the original public Termux build artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p recovered
+          recover() {
+            local artifact="$1" name="$2" sha="$3"
+            local archive="/tmp/${name}.zip" entry
+            curl --fail --location --silent --show-error --retry 3 \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -o "$archive" \
+              "https://api.github.com/repos/termux/termux-packages/actions/artifacts/$artifact/zip"
+            unzip -p "$archive" '*.tar' > "/tmp/${name}.tar"
+            entry="$(tar -tf "/tmp/${name}.tar" | awk -v name="$name" '$0 == name || $0 ~ ("/" name "$") {print}')"
+            test -n "$entry"
+            tar -xOf "/tmp/${name}.tar" "$entry" > "recovered/$name"
+            printf '%s  %s\n' "$sha" "recovered/$name" | sha256sum --check
+          }
+          recover 8567576638 nodejs-lts_24.18.0_aarch64.deb 6456b78aba9e0007de7a4c580d2b34bb3865145bebe06e75273152f8dcba4236
+          recover 8746673348 npm_11.19.0_all.deb 385a051111f66c56d0564e6809244f1740427805a78d2e5a5dc470fb420832f8
+          recover 8126700666 patchelf_0.19.1_aarch64.deb a08bea49b3c9c3bf449ee0c7b7ee9c97a9f3ab84ae06ace08a564d0903a23c3f
+
+      - name: Verify libc++ from the official public preview APK
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          curl --fail --location --retry 3 --retry-delay 2 \
+            -o /tmp/official.apk \
+            https://github.com/Mcpasi/AGENTCODI/releases/download/preview-0.7.6/AGENTCODI-0.7.6-preview.1-arm64-v8a-release.apk
+          echo '62b91245fd8ed0aa38598b8f755695d93648307d69fd861c26549ba624b0cebd  /tmp/official.apk' | sha256sum --check
+          unzip -p /tmp/official.apk lib/arm64-v8a/libc++_shared.so \
+            > recovered/libc++_shared.so
+          sha256sum recovered/libc++_shared.so
+
+      - name: Retain verified packages without printing binary data
+        uses: actions/upload-artifact@v4
+        with:
+          name: recovered-public-termux-inputs
+          path: recovered/*
+          if-no-files-found: error
+          retention-days: 90

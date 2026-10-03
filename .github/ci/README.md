@@ -246,3 +246,27 @@ ungranted `/proc` ancestor. The ELF guards already use the direct link read.
 
 This layout requires write access to `/` and is intended for the root-owned
 build container. Local builds retain the default `nested` layout.
+
+## Public zh-CN fork builds
+
+`.github/workflows/zh-cn-apk.yml` builds with public inputs and the workflow's
+read-only GitHub token. It does not require `AGENTCODI_INPUTS_TOKEN` or access
+to the private backup. `fetch-public-build-inputs.sh` checks every downloaded
+file against `build-inputs.tsv`, trying the rolling Termux mirrors and the
+public package archive before the original Termux Actions artifacts for
+Node.js 24.18.0, npm 11.19.0 and patchelf 0.19.1. Verified downloads are cached.
+Upstream Actions artifacts can expire; a future unavailable revision must be
+replaced with another verified source or an updated runtime pin set.
+
+The superseded libc++ 29 package is replaced by the already stripped and
+ELF-cleaned NDK r29 runtime from the pinned public preview APK. Both the APK
+and extracted ARM64 library have fixed SHA-256 checks in the build script.
+Using the packaged library preserves its Android linker compatibility; the
+raw NDK library contains unsupported dynamic tags on the container's linker.
+The pinned Termux base image already supplies libc++ 29 for the compiler.
+The container continues to reconstruct ndk-sysroot 29-3 from the verified NDK.
+
+The locally built Codex archive is reconstructed from the pinned official
+preview APK. Each extracted binary, licence and notice retains its existing
+SHA-256 check; only the new tar archive's packaging hash is set during CI.
+The private-input `apk.yml` workflow remains a separate entry point.
